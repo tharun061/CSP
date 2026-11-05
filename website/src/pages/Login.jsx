@@ -25,7 +25,7 @@ export const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
@@ -38,7 +38,7 @@ export const Login = () => {
 
     try {
       const targetRole = activeTab === 'citizen' ? 'CITIZEN' : 'PROVIDER';
-      const user = login({
+      const user = await login({
         phone: phone.trim(),
         password: password.trim(),
         role: targetRole

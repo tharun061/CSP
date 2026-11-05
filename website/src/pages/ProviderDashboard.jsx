@@ -32,7 +32,7 @@ export const ProviderDashboard = () => {
     (b) => b.providerPhone === providerPhone || b.providerId === currentUser?.id || b.providerName === currentUser?.fullName
   );
 
-  const handleCompleteSubmit = (e) => {
+  const handleCompleteSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
@@ -44,7 +44,7 @@ export const ProviderDashboard = () => {
     }
 
     try {
-      completeJobWithUpload({
+      await completeJobWithUpload({
         bookingId: activeJobForCompletion.id,
         additionalWorkCharges: parseFloat(workCharges) || 0,
         workDetails: workDetails.trim() || 'Repairs completed and inspected on site.'

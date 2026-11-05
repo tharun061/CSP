@@ -48,7 +48,7 @@ export const Register = () => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
@@ -71,7 +71,7 @@ export const Register = () => {
 
     try {
       if (activeTab === 'citizen') {
-        registerCitizen({
+        await registerCitizen({
           fullName: fullName.trim(),
           phone: phone.trim(),
           password,
@@ -82,7 +82,7 @@ export const Register = () => {
         setLoading(false);
         navigate('/customer');
       } else {
-        registerProvider({
+        await registerProvider({
           fullName: fullName.trim(),
           phone: phone.trim(),
           password,

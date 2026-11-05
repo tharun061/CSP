@@ -36,7 +36,7 @@ export const BookingModal = ({ service, provider, onClose, onSuccess }) => {
 
   const currentDistrictData = apDistricts.find((d) => d.nameEn === district) || selectedDistrict;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
@@ -53,7 +53,7 @@ export const BookingModal = ({ service, provider, onClose, onSuccess }) => {
     setLoading(true);
 
     try {
-      const newBooking = createBooking({
+      const newBooking = await createBooking({
         serviceId: service?.id || 'srv-gen',
         serviceName: service?.name_en || (lang === 'te' ? 'సాధారణ సేవ' : 'General Service'),
         providerId: provider?.id || 'prov-auto',

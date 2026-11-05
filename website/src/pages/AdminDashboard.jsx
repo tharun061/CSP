@@ -65,7 +65,7 @@ export const AdminDashboard = () => {
   const completedBookings = bookings.filter((b) => b.status === 'COMPLETED');
   const activeGuarantees = bookings.filter((b) => b.guaranteeActive);
 
-  const handleAssignWorkerB = (e) => {
+  const handleAssignWorkerB = async (e) => {
     e.preventDefault();
     setAssignError(null);
 
@@ -75,7 +75,7 @@ export const AdminDashboard = () => {
     }
 
     try {
-      assignWorkerB({
+      await assignWorkerB({
         claimId: selectedClaimForWorkerB.id,
         workerBId: selectedWorkerBId
       });
@@ -132,7 +132,7 @@ export const AdminDashboard = () => {
               <Users className="w-5 h-5 text-emerald-600" />
             </div>
             <div className="text-3xl font-black text-slate-900 font-mono">
-              {registeredCitizens.length + 3890}
+              {registeredCitizens.length}
             </div>
             <p className="text-[11px] text-emerald-700 font-medium">
               Verified rural households across AP
@@ -158,7 +158,7 @@ export const AdminDashboard = () => {
               <CheckCircle2 className="w-5 h-5 text-emerald-600" />
             </div>
             <div className="text-3xl font-black text-slate-900 font-mono">
-              {completedBookings.length + 142}
+              {completedBookings.length}
             </div>
             <p className="text-[11px] text-emerald-700 font-medium">
               ₹50 visit fee standard enforced
@@ -171,7 +171,7 @@ export const AdminDashboard = () => {
               <ShieldCheck className="w-5 h-5 text-emerald-600" />
             </div>
             <div className="text-3xl font-black text-slate-900 font-mono">
-              {activeGuarantees.length + 104}
+              {activeGuarantees.length}
             </div>
             <p className="text-[11px] text-emerald-700 font-medium">
               Worker B free re-service protected

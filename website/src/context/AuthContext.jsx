@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 const AuthContext = createContext();
 
@@ -6,7 +7,7 @@ const USERS_STORAGE_KEY = 'gramaseva_registered_users';
 const SESSION_STORAGE_KEY = 'gramaseva_active_session';
 
 export const AuthProvider = ({ children }) => {
-  // Store of all registered accounts (persistent in localStorage)
+  // Store of registered accounts
   const [users, setUsers] = useState(() => {
     try {
       const stored = localStorage.getItem(USERS_STORAGE_KEY);
@@ -16,7 +17,7 @@ export const AuthProvider = ({ children }) => {
     }
   });
 
-  // Currently logged-in user session
+  // Current session
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const session = localStorage.getItem(SESSION_STORAGE_KEY);
@@ -25,6 +26,48 @@ export const AuthProvider = ({ children }) => {
       return null;
     }
   });
+
+  // Load registered users from live Supabase if connected
+  useEffect(() => {
+    const fetchSupabaseUsers = async () => {
+      if (!isSupabaseConfigured || !supabase) return;
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*, provider_profiles(*)');
+
+        if (!error && data) {
+          const mapped = data.map((u) => {
+            const profile = Array.isArray(u.provider_profiles)
+              ? u.provider_profiles[0]
+              : u.provider_profiles;
+
+            return {
+              id: u.id,
+              role: u.role,
+              fullName: u.full_name,
+              phone: u.phone,
+              password: u.password_hash,
+              district: u.district,
+              mandal: u.mandal,
+              village: u.village,
+              services: profile?.services_list || [],
+              experienceYears: profile?.experience_years || 1,
+              rating: profile?.rating || 5.0,
+              completedJobs: profile?.completed_jobs || 0,
+              verified: profile?.status === 'VERIFIED',
+              createdAt: u.created_at
+            };
+          });
+          setUsers(mapped);
+        }
+      } catch (err) {
+        console.warn('Could not load users from Supabase:', err);
+      }
+    };
+
+    fetchSupabaseUsers();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
@@ -39,14 +82,47 @@ export const AuthProvider = ({ children }) => {
   }, [currentUser]);
 
   // Citizen Registration
-  const registerCitizen = ({ fullName, phone, password, district, mandal, village }) => {
+  const registerCitizen = async ({ fullName, phone, password, district, mandal, village }) => {
+    // Check locally first
     const existing = users.find((u) => u.phone === phone);
     if (existing) {
       throw new Error('A user with this mobile number is already registered.');
     }
 
+    let assignedId = `usr-${Date.now()}`;
+
+    // Direct write to Supabase if connected
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .insert({
+            phone,
+            full_name: fullName,
+            password_hash: password,
+            role: 'CITIZEN',
+            district,
+            mandal,
+            village,
+            preferred_language: 'en'
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Supabase registration error:', error);
+          throw new Error(error.message || 'Database insert failed.');
+        }
+
+        if (data) assignedId = data.id;
+      } catch (err) {
+        console.error('Failed to register in Supabase:', err);
+        throw err;
+      }
+    }
+
     const newUser = {
-      id: `usr-${Date.now()}`,
+      id: assignedId,
       role: 'CITIZEN',
       fullName,
       phone,
@@ -57,14 +133,13 @@ export const AuthProvider = ({ children }) => {
       createdAt: new Date().toISOString()
     };
 
-    const updated = [...users, newUser];
-    setUsers(updated);
+    setUsers((prev) => [...prev, newUser]);
     setCurrentUser(newUser);
     return newUser;
   };
 
   // Provider Registration
-  const registerProvider = ({
+  const registerProvider = async ({
     fullName,
     phone,
     password,
@@ -79,8 +154,54 @@ export const AuthProvider = ({ children }) => {
       throw new Error('A technician with this mobile number is already registered.');
     }
 
+    let assignedId = `prov-${Date.now()}`;
+
+    // Direct write to Supabase if connected
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: userRow, error: uErr } = await supabase
+          .from('users')
+          .insert({
+            phone,
+            full_name: fullName,
+            password_hash: password,
+            role: 'PROVIDER',
+            district,
+            mandal,
+            village,
+            preferred_language: 'en'
+          })
+          .select()
+          .single();
+
+        if (uErr) {
+          throw new Error(uErr.message || 'Failed to create user in database.');
+        }
+
+        if (userRow) {
+          assignedId = userRow.id;
+          // Insert provider profile
+          const { error: pErr } = await supabase
+            .from('provider_profiles')
+            .insert({
+              user_id: userRow.id,
+              experience_years: parseInt(experienceYears, 10) || 1,
+              rating: 5.0,
+              completed_jobs: 0,
+              status: 'VERIFIED',
+              services_list: services || []
+            });
+
+          if (pErr) console.warn('Provider profile insert warning:', pErr);
+        }
+      } catch (err) {
+        console.error('Failed to register provider in Supabase:', err);
+        throw err;
+      }
+    }
+
     const newProvider = {
-      id: `prov-${Date.now()}`,
+      id: assignedId,
       role: 'PROVIDER',
       fullName,
       phone,
@@ -96,14 +217,57 @@ export const AuthProvider = ({ children }) => {
       createdAt: new Date().toISOString()
     };
 
-    const updated = [...users, newProvider];
-    setUsers(updated);
+    setUsers((prev) => [...prev, newProvider]);
     setCurrentUser(newProvider);
     return newProvider;
   };
 
   // Login for Citizen or Provider
-  const login = ({ phone, password, role }) => {
+  const login = async ({ phone, password, role }) => {
+    // If Supabase is connected, query live database directly!
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*, provider_profiles(*)')
+          .eq('phone', phone)
+          .eq('password_hash', password)
+          .single();
+
+        if (!error && data) {
+          if (role && data.role !== role) {
+            throw new Error(`This mobile number is registered as a ${data.role}, not ${role}. Please use the correct tab.`);
+          }
+
+          const profile = Array.isArray(data.provider_profiles)
+            ? data.provider_profiles[0]
+            : data.provider_profiles;
+
+          const loggedInUser = {
+            id: data.id,
+            role: data.role,
+            fullName: data.full_name,
+            phone: data.phone,
+            district: data.district,
+            mandal: data.mandal,
+            village: data.village,
+            services: profile?.services_list || [],
+            experienceYears: profile?.experience_years || 1,
+            rating: profile?.rating || 5.0,
+            completedJobs: profile?.completed_jobs || 0,
+            verified: profile?.status === 'VERIFIED',
+            createdAt: data.created_at
+          };
+
+          setCurrentUser(loggedInUser);
+          return loggedInUser;
+        }
+      } catch (err) {
+        console.warn('Supabase login check:', err.message);
+      }
+    }
+
+    // Fallback to local users list
     const user = users.find(
       (u) => u.phone === phone && u.password === password && (role ? u.role === role : true)
     );
@@ -118,7 +282,6 @@ export const AuthProvider = ({ children }) => {
 
   // Official Admin Login
   const loginAdmin = ({ email, password }) => {
-    // Official AP Government Admin Portal Verification
     if (
       email.trim().toLowerCase() === 'admin@gramaseva.ap.gov.in' &&
       password === 'admin@ap2026'

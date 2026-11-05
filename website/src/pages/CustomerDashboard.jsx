@@ -36,12 +36,12 @@ export const CustomerDashboard = () => {
       )
     : bookings;
 
-  const handleClaimSubmit = (e) => {
+  const handleClaimSubmit = async (e) => {
     e.preventDefault();
     if (!claimModalBooking || !issueDesc.trim()) return;
 
     try {
-      fileGuaranteeClaim({
+      await fileGuaranteeClaim({
         bookingId: claimModalBooking.id,
         issueDescription: issueDesc.trim()
       });

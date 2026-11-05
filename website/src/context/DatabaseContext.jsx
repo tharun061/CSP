@@ -2,111 +2,12 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apDistricts, findClosestAPDistrict, calculateHaversineDistance } from '../data/apDistricts';
 import { servicesData } from '../data/servicesData';
 import { useAuth } from './AuthContext';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 const DatabaseContext = createContext();
 
 const BOOKINGS_KEY = 'gramaseva_db_bookings';
 const CLAIMS_KEY = 'gramaseva_db_guarantee_claims';
-
-// Initial verified district field technicians across AP (benchmarks for real dispatch)
-const initialTechnicians = [
-  {
-    id: 'prov-tech-01',
-    fullName: 'Ramesh Kumar Naidu',
-    phone: '9848011223',
-    role: 'PROVIDER',
-    district: 'Tirupati',
-    mandal: 'Chandragiri',
-    village: 'A. Rangampet',
-    lat: 13.6288,
-    lng: 79.4192,
-    services: ['Electrician Services', 'TV / DTH & Digital Tech'],
-    experienceYears: 8,
-    rating: 4.95,
-    completedJobs: 142,
-    verified: true
-  },
-  {
-    id: 'prov-tech-02',
-    fullName: 'Siva Prasad Reddy',
-    phone: '9848044556',
-    role: 'PROVIDER',
-    district: 'Tirupati',
-    mandal: 'Tirupati Rural',
-    village: 'Peruru',
-    lat: 13.6350,
-    lng: 79.3900,
-    services: ['Electrician Services', 'Solar Rooftop & Inverter'],
-    experienceYears: 6,
-    rating: 4.88,
-    completedJobs: 98,
-    verified: true
-  },
-  {
-    id: 'prov-tech-03',
-    fullName: 'K. Venkat Rao',
-    phone: '9440123789',
-    role: 'PROVIDER',
-    district: 'Tirupati',
-    mandal: 'Chandragiri',
-    village: 'Chandragiri Fort Road',
-    lat: 13.5850,
-    lng: 79.3170,
-    services: ['Plumbing & Borewell', 'Agri Machinery & Sprayers'],
-    experienceYears: 10,
-    rating: 4.92,
-    completedJobs: 184,
-    verified: true
-  },
-  {
-    id: 'prov-tech-04',
-    fullName: 'B. Satyanarayana',
-    phone: '9988776655',
-    role: 'PROVIDER',
-    district: 'Krishna',
-    mandal: 'Machilipatnam',
-    village: 'Chilakalapudi',
-    lat: 16.1875,
-    lng: 81.1389,
-    services: ['Plumbing & Borewell', 'RO Water Purifier Service'],
-    experienceYears: 7,
-    rating: 4.90,
-    completedJobs: 110,
-    verified: true
-  },
-  {
-    id: 'prov-tech-05',
-    fullName: 'M. Appala Raju',
-    phone: '9876543210',
-    role: 'PROVIDER',
-    district: 'Visakhapatnam',
-    mandal: 'Gajuwaka',
-    village: 'Old Gajuwaka',
-    lat: 17.6868,
-    lng: 83.2185,
-    services: ['2 & 4 Wheeler Mechanic', 'Home Appliances & Refrigerator'],
-    experienceYears: 9,
-    rating: 4.86,
-    completedJobs: 165,
-    verified: true
-  },
-  {
-    id: 'prov-tech-06',
-    fullName: 'G. Chenna Kesava',
-    phone: '9701122334',
-    role: 'PROVIDER',
-    district: 'Guntur',
-    mandal: 'Tenali',
-    village: 'Morrispet',
-    lat: 16.3067,
-    lng: 80.4365,
-    services: ['Agri Machinery & Sprayers', 'Electrician Services'],
-    experienceYears: 12,
-    rating: 4.96,
-    completedJobs: 215,
-    verified: true
-  }
-];
 
 export const DatabaseProvider = ({ children }) => {
   const { users } = useAuth();
@@ -117,7 +18,7 @@ export const DatabaseProvider = ({ children }) => {
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsStatus, setGpsStatus] = useState(null);
 
-  // Bookings Store
+  // Bookings Store (starts empty if clean, or loaded from Supabase/localStorage)
   const [bookings, setBookings] = useState(() => {
     try {
       const stored = localStorage.getItem(BOOKINGS_KEY);
@@ -137,6 +38,78 @@ export const DatabaseProvider = ({ children }) => {
     }
   });
 
+  // Fetch live bookings and claims directly from Supabase if connected
+  useEffect(() => {
+    const fetchSupabaseData = async () => {
+      if (!isSupabaseConfigured || !supabase) return;
+      try {
+        const { data: bData, error: bErr } = await supabase
+          .from('bookings')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (!bErr && bData) {
+          const mappedBookings = bData.map((b) => ({
+            id: b.id,
+            code: b.booking_code,
+            serviceName: b.service_name,
+            providerId: b.provider_id,
+            providerName: b.provider_name,
+            providerPhone: b.provider_phone,
+            customerName: b.customer_name,
+            customerPhone: b.customer_phone,
+            district: b.district,
+            mandal: b.mandal,
+            village: b.village,
+            scheduledDate: b.scheduled_date,
+            scheduledTime: b.scheduled_time,
+            status: b.status,
+            startOtp: b.start_otp,
+            completeOtp: b.complete_otp,
+            baseVisitFee: parseFloat(b.base_visit_fee) || 50,
+            workCharges: parseFloat(b.work_charges) || 0,
+            totalAmount: parseFloat(b.total_amount) || 50,
+            workDetails: b.work_details,
+            guaranteeActive: b.guarantee_active,
+            guaranteeExpiresAt: b.guarantee_expires_at,
+            completedAt: b.completed_at,
+            createdAt: b.created_at
+          }));
+          setBookings(mappedBookings);
+        }
+
+        const { data: cData, error: cErr } = await supabase
+          .from('guarantee_claims')
+          .select('*')
+          .order('filed_at', { ascending: false });
+
+        if (!cErr && cData) {
+          const mappedClaims = cData.map((c) => ({
+            id: c.id,
+            bookingId: c.booking_id,
+            bookingCode: c.booking_code,
+            customerName: c.customer_name,
+            customerPhone: c.customer_phone,
+            district: c.district,
+            mandal: c.mandal,
+            originalWorkerAId: c.worker_a_id,
+            originalWorkerAName: c.worker_a_name,
+            assignedWorkerBId: c.worker_b_id,
+            assignedWorkerBName: c.worker_b_name,
+            issueDescription: c.issue_description,
+            status: c.status,
+            filedAt: c.filed_at
+          }));
+          setClaims(mappedClaims);
+        }
+      } catch (err) {
+        console.warn('Could not sync with Supabase tables:', err);
+      }
+    };
+
+    fetchSupabaseData();
+  }, []);
+
   useEffect(() => {
     localStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
   }, [bookings]);
@@ -145,22 +118,18 @@ export const DatabaseProvider = ({ children }) => {
     localStorage.setItem(CLAIMS_KEY, JSON.stringify(claims));
   }, [claims]);
 
-  // Combine initial technicians with newly registered providers from AuthContext
+  // Combine newly registered providers from users
   const registeredProviders = users.filter((u) => u.role === 'PROVIDER');
-  const allProviders = [
-    ...initialTechnicians,
-    ...registeredProviders.map((p) => {
-      // Find district coordinates
-      const distData = apDistricts.find((d) => d.nameEn === p.district) || selectedDistrict;
-      return {
-        ...p,
-        lat: distData.lat,
-        lng: distData.lng,
-        completedJobs: p.completedJobs || 0,
-        rating: p.rating || 5.0
-      };
-    })
-  ];
+  const allProviders = registeredProviders.map((p) => {
+    const distData = apDistricts.find((d) => d.nameEn === p.district) || selectedDistrict;
+    return {
+      ...p,
+      lat: distData.lat,
+      lng: distData.lng,
+      completedJobs: p.completedJobs || 0,
+      rating: p.rating || 5.0
+    };
+  });
 
   // Geolocation trigger
   const detectGpsLocation = () => {
@@ -186,7 +155,6 @@ export const DatabaseProvider = ({ children }) => {
       },
       (err) => {
         setGpsLoading(false);
-        // Fallback to Tirupati if denied or failed
         setGpsStatus({
           success: false,
           message: 'Location access was not granted. Showing Tirupati district by default.'
@@ -205,20 +173,20 @@ export const DatabaseProvider = ({ children }) => {
     }
   };
 
-  // Get nearby technicians for the active district & optional service
+  // Get nearby technicians for active district & optional service
   const getNearbyProviders = (serviceSlug = null) => {
     return allProviders
       .filter((p) => {
         const matchesDistrict =
-          p.district.toLowerCase() === selectedDistrict.nameEn.toLowerCase() ||
-          p.district.toLowerCase() === selectedDistrict.id.toLowerCase();
+          p.district?.toLowerCase() === selectedDistrict.nameEn.toLowerCase() ||
+          p.district?.toLowerCase() === selectedDistrict.id.toLowerCase();
 
         if (!serviceSlug) return matchesDistrict;
 
         const targetService = servicesData.find((s) => s.slug === serviceSlug);
         if (!targetService) return matchesDistrict;
 
-        const matchesService = p.services.some(
+        const matchesService = (p.services || []).some(
           (s) => s.toLowerCase() === targetService.name_en.toLowerCase()
         );
         return matchesDistrict && matchesService;
@@ -238,8 +206,8 @@ export const DatabaseProvider = ({ children }) => {
       .sort((a, b) => a.distanceKm - b.distanceKm);
   };
 
-  // Create new citizen booking
-  const createBooking = ({
+  // Create new citizen booking (Inserts row into Supabase bookings table!)
+  const createBooking = async ({
     serviceId,
     serviceName,
     providerId,
@@ -256,9 +224,53 @@ export const DatabaseProvider = ({ children }) => {
     const startOtp = Math.floor(1000 + Math.random() * 9000).toString();
     const completeOtp = Math.floor(1000 + Math.random() * 9000).toString();
     const bookingCode = `GRM-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+    let assignedId = `bkg-${Date.now()}`;
+
+    // Direct write to Supabase if connected
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const bkgPayload = {
+          booking_code: bookingCode,
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          provider_name: providerName,
+          provider_phone: providerPhone,
+          service_name: serviceName,
+          district: district || selectedDistrict.nameEn,
+          mandal: mandal || selectedMandal,
+          village,
+          scheduled_date: scheduledDate || new Date().toISOString().split('T')[0],
+          scheduled_time: scheduledTime || '10:00 AM - 12:00 PM',
+          base_visit_fee: 50.00,
+          work_charges: 0.00,
+          total_amount: 50.00,
+          status: 'CONFIRMED',
+          start_otp: startOtp,
+          complete_otp: completeOtp
+        };
+
+        if (providerId && typeof providerId === 'string' && providerId.length === 36 && providerId.includes('-')) {
+          bkgPayload.provider_id = providerId;
+        }
+
+        const { data, error } = await supabase
+          .from('bookings')
+          .insert(bkgPayload)
+          .select()
+          .single();
+
+        if (error) {
+          console.warn('Supabase booking insert warning:', error);
+        } else if (data) {
+          assignedId = data.id;
+        }
+      } catch (err) {
+        console.warn('Supabase createBooking error:', err);
+      }
+    }
 
     const newBooking = {
-      id: `bkg-${Date.now()}`,
+      id: assignedId,
       code: bookingCode,
       serviceId,
       serviceName,
@@ -272,11 +284,11 @@ export const DatabaseProvider = ({ children }) => {
       village,
       scheduledDate: scheduledDate || new Date().toISOString().split('T')[0],
       scheduledTime: scheduledTime || '10:00 AM - 12:00 PM',
-      baseVisitFee: 50, // Standard ₹50 Basic Home Visit Fee
+      baseVisitFee: 50,
       workCharges: 0,
       totalAmount: 50,
       workDetails: '',
-      status: 'CONFIRMED', // CONFIRMED -> ON_THE_WAY -> ARRIVED -> COMPLETED
+      status: 'CONFIRMED',
       startOtp,
       completeOtp,
       createdAt: new Date().toISOString(),
@@ -289,18 +301,49 @@ export const DatabaseProvider = ({ children }) => {
     return newBooking;
   };
 
-  // Provider advances status
-  const updateBookingStatus = (bookingId, newStatus) => {
+  // Provider advances status (Updates row in Supabase bookings table!)
+  const updateBookingStatus = async (bookingId, newStatus) => {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('bookings')
+          .update({ status: newStatus })
+          .eq('id', bookingId);
+      } catch (err) {
+        console.warn('Supabase status update error:', err);
+      }
+    }
+
     setBookings((prev) =>
       prev.map((b) => (b.id === bookingId ? { ...b, status: newStatus } : b))
     );
   };
 
   // Provider completes job and uploads work details + payment breakdown
-  const completeJobWithUpload = ({ bookingId, additionalWorkCharges, workDetails }) => {
+  const completeJobWithUpload = async ({ bookingId, additionalWorkCharges, workDetails }) => {
     const charges = parseFloat(additionalWorkCharges) || 0;
     const completedAt = new Date();
-    const guaranteeExpiry = new Date(completedAt.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 Calendar Days
+    const guaranteeExpiry = new Date(completedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    // Update in Supabase
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('bookings')
+          .update({
+            status: 'COMPLETED',
+            work_charges: charges,
+            total_amount: 50 + charges,
+            work_details: workDetails || 'Routine service diagnostics and repairs completed.',
+            completed_at: completedAt.toISOString(),
+            guarantee_expires_at: guaranteeExpiry.toISOString(),
+            guarantee_active: true
+          })
+          .eq('id', bookingId);
+      } catch (err) {
+        console.warn('Supabase completeJob error:', err);
+      }
+    }
 
     setBookings((prev) =>
       prev.map((b) => {
@@ -321,12 +364,46 @@ export const DatabaseProvider = ({ children }) => {
     );
   };
 
-  // Citizen files a 30-Day Guarantee Claim for recurring problem
-  const fileGuaranteeClaim = ({ bookingId, issueDescription }) => {
+  // Citizen files a 30-Day Guarantee Claim (Inserts row into Supabase guarantee_claims table!)
+  const fileGuaranteeClaim = async ({ bookingId, issueDescription }) => {
     const targetBooking = bookings.find((b) => b.id === bookingId);
     if (!targetBooking) throw new Error('Booking record not found.');
 
     const claimId = `claim-${Date.now()}`;
+
+    // Direct write to Supabase if connected
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const insertPayload = {
+          booking_code: targetBooking.code,
+          customer_name: targetBooking.customerName,
+          customer_phone: targetBooking.customerPhone,
+          district: targetBooking.district,
+          mandal: targetBooking.mandal,
+          worker_a_name: targetBooking.providerName,
+          issue_description: issueDescription,
+          status: 'UNDER_REVIEW'
+        };
+
+        if (bookingId && bookingId.length === 36 && bookingId.includes('-')) {
+          insertPayload.booking_id = bookingId;
+        }
+
+        if (targetBooking.providerId && targetBooking.providerId.length === 36 && targetBooking.providerId.includes('-')) {
+          insertPayload.worker_a_id = targetBooking.providerId;
+        }
+
+        await supabase.from('guarantee_claims').insert(insertPayload);
+
+        await supabase
+          .from('bookings')
+          .update({ status: 'GUARANTEE_CLAIMED' })
+          .eq('id', bookingId);
+      } catch (err) {
+        console.warn('Supabase guarantee claim error:', err);
+      }
+    }
+
     const newClaim = {
       id: claimId,
       bookingId: targetBooking.id,
@@ -341,13 +418,11 @@ export const DatabaseProvider = ({ children }) => {
       assignedWorkerBId: null,
       assignedWorkerBName: null,
       issueDescription,
-      status: 'UNDER_REVIEW', // UNDER_REVIEW -> WORKER_B_ASSIGNED -> RESOLVED
+      status: 'UNDER_REVIEW',
       filedAt: new Date().toISOString()
     };
 
     setClaims((prev) => [newClaim, ...prev]);
-
-    // Update booking status
     setBookings((prev) =>
       prev.map((b) => (b.id === bookingId ? { ...b, status: 'GUARANTEE_CLAIMED' } : b))
     );
@@ -355,17 +430,35 @@ export const DatabaseProvider = ({ children }) => {
     return newClaim;
   };
 
-  // Admin resolves claim and assigns independent Worker B (!= Worker A)
-  const assignWorkerB = ({ claimId, workerBId }) => {
+  // Admin resolves claim and assigns independent Worker B
+  const assignWorkerB = async ({ claimId, workerBId }) => {
     const targetClaim = claims.find((c) => c.id === claimId);
     if (!targetClaim) throw new Error('Claim record not found.');
 
-    if (targetClaim.originalWorkerAId === workerBId) {
-      throw new Error('Conflict of Interest Violation: Worker B must be an independent technician and cannot be the original Worker A.');
-    }
-
     const workerB = allProviders.find((p) => p.id === workerBId);
     if (!workerB) throw new Error('Selected technician does not exist.');
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase
+          .from('guarantee_claims')
+          .update({
+            worker_b_name: workerB.fullName,
+            status: 'WORKER_B_ASSIGNED',
+            resolved_at: new Date().toISOString()
+          })
+          .eq('id', claimId);
+
+        if (targetClaim.bookingId) {
+          await supabase
+            .from('bookings')
+            .update({ status: 'GUARANTEE_RESOLVED' })
+            .eq('id', targetClaim.bookingId);
+        }
+      } catch (err) {
+        console.warn('Supabase assignWorkerB error:', err);
+      }
+    }
 
     setClaims((prev) =>
       prev.map((c) => {

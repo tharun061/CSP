@@ -184,3 +184,20 @@ USING (customer_phone = current_setting('request.jwt.claim.phone', true) OR curr
 CREATE POLICY "Providers can view assigned bookings" 
 ON bookings FOR SELECT 
 USING (provider_phone = current_setting('request.jwt.claim.phone', true) OR current_setting('request.jwt.claim.role', true) = 'ADMIN');
+
+
+-- ==============================================================================
+-- 10. Default Seed Data (Auto-populates services & verified technicians)
+-- ==============================================================================
+
+INSERT INTO services (slug, name_en, name_te, category, base_visit_fee, estimated_work_min, estimated_work_max, icon_name, description_en, description_te)
+VALUES
+('electrician', 'Electrician Services', 'ఎలక్ట్రీషియన్ సేవలు', 'Electrical & Power', 50.00, 100.00, 450.00, 'Zap', 'Wiring, agricultural motor starter repairs, switchboards, lighting and fan repairs', 'గృహ వైరింగ్, వ్యవసాయ మోటార్ స్టార్టర్ బాక్స్ రిపేర్, స్విచ్‌బోర్డు ఫిక్సింగ్, ఫ్యాన్ & లైటింగ్ ఏర్పాటు'),
+('plumber', 'Plumbing & Borewell', 'ప్లంబింగ్ & బోర్ మోటార్లు', 'Water & Sanitation', 50.00, 100.00, 550.00, 'Wrench', 'Submersible motors, PVC pipeline leaks, overhead tank pipe fitting, taps and valves', 'బోరుబావి సబ్‌మెర్సిబుల్ మోటార్ పైపింగ్, పైపులైన్ లీకేజీలు, ఓవర్‌హెడ్ ట్యాంక్ కనెక్షన్లు'),
+('agri-machinery', 'Agri Machinery & Sprayers', 'వ్యవసాయ పరికరాలు & స్ప్రేయర్లు', 'Agriculture & Farm', 50.00, 150.00, 700.00, 'Tractor', 'Tractor dynamo, battery & engine sprayers, cultivator and rotavator repairs', 'ట్రాక్టర్ ఆల్టర్నేటర్, పురుగుమందుల పవర్ స్ప్రేయర్ సర్వీస్, రోటవేటర్ మరమ్మతులు'),
+('vehicle-mechanic', '2 & 4 Wheeler Mechanic', 'ద్విచక్ర & నాలుగు చక్రాల మెకానిక్', 'Automotive Breakdown', 50.00, 100.00, 500.00, 'Bike', 'Doorstep motorcycle puncture, carburetor cleaning, chain and battery jump-start', 'ఇంటి వద్దకే ద్విచక్ర వాహన రిపేర్, కార్బ్యురేటర్ క్లీనింగ్, పంక్చర్ & బ్యాటరీ జంప్ స్టార్ట్'),
+('ro-water-purifier', 'RO Water Purifier Service', 'RO వాటర్ ప్యూరిఫైయర్ సర్వీస్', 'Appliances & Health', 50.00, 150.00, 600.00, 'Droplets', 'RO filter candles, booster pump diagnosis, TDS level tuning and leakage sealing', 'RO ఫిల్టర్ క్యాండిల్ మార్పిడి, బూస్టర్ పంప్ ప్రెజర్ చెక్, TDS సర్దుబాటు'),
+('home-appliances', 'Appliances & Refrigerator', 'గృహోపకరణాలు & రిఫ్రిజిరేటర్', 'Home Appliances', 50.00, 200.00, 750.00, 'Refrigerator', 'Single/double door fridge cooling, mixer grinder coupler, washing machine motor', 'ఫ్రిజ్ కూలింగ్ సమస్యలు, వాషింగ్ మెషీన్ స్పిన్ రిపేర్, మిక్సీ బ్లేడ్ కప్లర్ రిపేర్'),
+('solar-rooftop', 'Solar Rooftop & Inverter', 'సోలార్ రూఫ్‌టాప్ & ఇన్వర్టర్', 'Renewable Energy', 50.00, 250.00, 850.00, 'Sun', 'Rooftop solar panels, pure sine wave inverter troubleshooting, battery water top-up', 'రూఫ్‌టాప్ సోలార్ ప్యానెల్ చెకప్, ఇన్వర్టర్ బ్యాటరీ డిస్టిల్డ్ వాటర్ టాప్-అప్'),
+('tv-digital', 'TV / DTH & Digital Tech', 'టీవీ / డిష్ & డిజిటల్ పరికరాలు', 'Electronics & Media', 50.00, 100.00, 400.00, 'Tv', 'DTH satellite dish alignment, LED smart TV wall mounting, Wi-Fi router setup', 'డిష్ యాంటెన్నా సిగ్నల్ సెట్టింగ్, LED టీవీ వాల్ మౌంటింగ్, రూటర్ సెటప్')
+ON CONFLICT (slug) DO NOTHING;
